@@ -1,3 +1,5 @@
 [submodule "stan"]
 	path = stan
-        url = https://github.com/stan-dev/stan
+        url = git@github.com:metrumresearchgroup/stan.git
+        branch = torsten-develop
+	shallow = true
