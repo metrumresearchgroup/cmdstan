@@ -37,6 +37,7 @@ include make/stanc
 include make/program
 include make/tests
 include make/command
+include make/torsten.mk
 
 ifneq ($(filter-out clean clean-% print-% help help-% manual stan-update/% stan-update stan-pr/%,$(MAKECMDGOALS)),)
 -include $(patsubst %.cpp,%.d,$(STANC_TEMPLATE_INSTANTIATION_CPP))
