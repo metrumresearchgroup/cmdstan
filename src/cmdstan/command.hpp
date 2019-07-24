@@ -93,6 +93,16 @@ namespace cmdstan {
     if (cluster.rank_ != 0) return 0;
 #endif
 
+#ifdef TORSTEN_MPI_DYN
+    torsten::mpi::Communicator& pmx_comm = torsten::mpi::Session<NUM_TORSTEN_COMM>::comms[TORSTEN_COMM_ODE_PARM];
+    torsten::mpi::PMXDynamicLoad<TORSTEN_MPI_DYN_CLEANER> dyn_load(pmx_comm);
+    if (pmx_comm.rank > 0) {
+      torsten::mpi::PMXDynamicLoad<TORSTEN_MPI_DYN_SLAVE> load(pmx_comm);
+      load.slave();
+      return stan::services::error_codes::OK;
+    }
+#endif
+
     // Read arguments
     std::vector<argument*> valid_arguments;
     valid_arguments.push_back(new arg_id());
@@ -961,6 +971,7 @@ namespace cmdstan {
 #ifdef STAN_MPI
     cluster.stop_listen();
 #endif
+
     return return_code;
   }
 
