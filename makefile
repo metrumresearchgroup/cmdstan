@@ -20,6 +20,7 @@ help:
 
 -include $(HOME)/.config/stan/make.local  # user-defined variables
 -include make/local                       # user-defined variables
+include make/torsten_stanc.mk
 
 STAN ?= stan/
 MATH ?= $(STAN)lib/stan_math/
@@ -221,7 +222,7 @@ clean-deps:
 	@echo '  removing dependency files'
 	$(RM) $(call findfiles,src,*.d) $(call findfiles,src/stan,*.d) $(call findfiles,$(MATH)/stan,*.d)
 	$(RM) $(call findfiles,src,*.d.*) $(call findfiles,src/stan,*.d.*) $(call findfiles,$(MATH)/stan,*.d.*)
-	$(RM) $(call findfiles,src,*.dSYM) $(call findfiles,src/stan,*.dSYM) $(call findfiles,$(MATH)/stan,*.dSYM)
+	$(RM) -r $(call findfiles,src,*.dSYM) $(call findfiles,src/stan,*.dSYM) $(call findfiles,$(MATH)/stan,*.dSYM)
 
 clean-manual:
 	$(RM) -r doc
