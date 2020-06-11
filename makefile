@@ -21,6 +21,7 @@ help:
 -include $(HOME)/.config/stan/make.local  # user-defined variables
 -include make/local                       # user-defined variables
 include make/torsten_stanc.mk
+include make/mpi_warmup.mk
 
 STAN ?= stan/
 MATH ?= $(STAN)lib/stan_math/
