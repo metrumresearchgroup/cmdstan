@@ -30,7 +30,7 @@ perf.cc <- function(stanfit) {
 }
 
 ## run both cross-chain & regular warmup version and output summary
-run.cc.metric <- function(modelpath, model, metric, seed, adapt.arg="") {
+run.cc.metric <- function(modelpath, model, metric, init, seed, adapt.arg="") {
     model.file = paste(model,"stan", sep="")
     data.file = paste(model,".data.R", sep="")
     system(paste("make -j4 ", file.path(modelpath, model, model), sep=""))
@@ -38,9 +38,9 @@ run.cc.metric <- function(modelpath, model, metric, seed, adapt.arg="") {
 
     setwd(file.path(modelpath, model))
 
-    system(paste("mpiexec -n 4 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
+    system(paste("mpiexec -n 4 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep=""))
     fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
-    system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " output file=$i.output.csv id=$i;done", " ",sep=""))
+    system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=mpi.$i.", init, " random seed=", seed, " output file=$i.output.csv id=$i;done", " ",sep=""))
     fit.seq <- rstan::read_stan_csv(dir(pattern="^[0-3].output.csv", full.name=TRUE))
     summary <- data.frame(perf.cc(fit.mpi), perf.cc(fit.seq))
     colnames(summary) <- c(paste0("MPI.",metric), paste0("regular.",metric))
@@ -50,11 +50,11 @@ run.cc.metric <- function(modelpath, model, metric, seed, adapt.arg="") {
 }
 
 ## run cross-chain & regular warmup for both diag & dense metric
-run.cc <- function(modelpath, model, adapt.arg="") {
+run.cc <- function(modelpath, model, init, adapt.arg="") {
     seed = sample(999999:9999999, 1)
 
-    fits.diag  <- run.cc.metric(modelpath, model, "diag_e",  seed, adapt.arg)
-    fits.dense <- run.cc.metric(modelpath, model, "dense_e", seed, adapt.arg)
+    fits.diag  <- run.cc.metric(modelpath, model, "diag_e",  init, seed, adapt.arg)
+    fits.dense <- run.cc.metric(modelpath, model, "dense_e", init, seed, adapt.arg)
 
     library("gridExtra")
     library("bayesplot")

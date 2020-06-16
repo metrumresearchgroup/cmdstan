@@ -167,10 +167,16 @@ namespace cmdstan {
         stan::services::util::set_cross_chain_id(id, num_cross_chains);
         id_arg -> set_value(static_cast<int>(id));
 
+        // output file for each chain
         string_argument* ptr_out = dynamic_cast<string_argument*>(parser.arg("output")->arg("file"));
         std::string f_out = ptr_out -> value();
         stan::services::util::set_cross_chain_file(f_out, num_cross_chains);
         ptr_out -> set_value(f_out);
+
+        // init
+        std::string init = dynamic_cast<string_argument*>(parser.arg("init"))->value();
+        stan::services::util::set_cross_chain_file(init, num_cross_chains);
+        dynamic_cast<string_argument*>(parser.arg("init")) -> set_value(init);
 
         info.set_num_chains(num_cross_chains);
         err.set_num_chains(num_cross_chains);
