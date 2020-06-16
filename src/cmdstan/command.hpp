@@ -44,6 +44,7 @@
 #include <stan/services/experimental/advi/fullrank.hpp>
 #include <stan/services/experimental/advi/meanfield.hpp>
 #include <stan/math/torsten/mpi/dynamic_load.hpp>
+#include <stan/math/torsten/mpi/session.hpp>
 #include <stan/math/prim/fun/Eigen.hpp>
 #include <fstream>
 #include <sstream>
@@ -59,6 +60,9 @@
 #include <stan/math/prim/functor/mpi_command.hpp>
 #include <stan/math/prim/functor/mpi_distributed_apply.hpp>
 #endif
+
+// For cross chain warmup
+#include <stan/math/torsten/mpi/session_def.cpp>
 
 // forward declaration for function defined in another translation unit
 stan::model::model_base& new_model(stan::io::var_context& data_context,
@@ -170,10 +174,12 @@ namespace cmdstan {
 
         info.set_num_chains(num_cross_chains);
         err.set_num_chains(num_cross_chains);
+
+        // torsten
+        torsten::mpi::Session::num_chains = num_cross_chains;
       }
     }
 #endif
-
 
     parser.print(info);
     write_parallel_info(info);
