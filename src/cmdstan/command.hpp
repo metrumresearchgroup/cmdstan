@@ -173,6 +173,15 @@ namespace cmdstan {
         stan::services::util::set_cross_chain_file(f_out, num_cross_chains);
         ptr_out -> set_value(f_out);
 
+        // init
+        std::string init = dynamic_cast<string_argument*>(parser.arg("init"))->value();
+        try {
+          double init_radius = boost::lexical_cast<double>(init);
+        } catch (const boost::bad_lexical_cast& e) {
+          stan::services::util::set_cross_chain_file(init, num_cross_chains);
+          dynamic_cast<string_argument*>(parser.arg("init")) -> set_value(init);
+        }
+
         info.set_num_chains(num_cross_chains);
         err.set_num_chains(num_cross_chains);
 
@@ -236,14 +245,6 @@ namespace cmdstan {
       init_radius = boost::lexical_cast<double>(init);
       init = "";
     } catch (const boost::bad_lexical_cast& e) {
-#ifdef MPI_ADAPTED_WARMUP
-    if (parser.arg("method")->arg("sample") && num_cross_chains > 1) {
-        // init
-        std::string init = dynamic_cast<string_argument*>(parser.arg("init"))->value();
-        stan::services::util::set_cross_chain_file(init, num_cross_chains);
-        dynamic_cast<string_argument*>(parser.arg("init")) -> set_value(init);
-      }
-#endif
     }
     std::shared_ptr<stan::io::var_context> init_context = get_var_context(init);
 

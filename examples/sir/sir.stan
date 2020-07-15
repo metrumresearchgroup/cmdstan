@@ -49,9 +49,13 @@ parameters {
 
 transformed parameters {
   real<lower=0> y[N_t, 4];
+  real<lower=0> y4[N_t];
   {
     real theta[5] = {beta, kappa, gamma, xi, delta};
-    y = integrate_ode_rk45(simple_SIR, y0, t0, t, theta, x_r, x_i);
+    y = integrate_ode_rk45(simple_SIR, y0, t0, t, theta, x_r, x_i, 1e-4, 1e-5, 5000);
+  }
+  for(i in 1:N_t) {
+    y4[i] = y[i, 4];
   }
 }
 
@@ -65,5 +69,5 @@ model {
   for (n in 2:N_t)
     stoi_hat[n] ~ poisson(y[n - 1, 1] - y[n, 1]);
 
-  B_hat ~ lognormal(log(col(to_matrix(y), 4)), 0.15);
+  B_hat ~ lognormal(log(y4), 0.15);
 }

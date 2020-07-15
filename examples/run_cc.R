@@ -24,8 +24,8 @@ perf.cc <- function(stanfit) {
     res <- data.frame(run = c(sum_warmup_leapfrogs / n_chain, sum_leapfrogs / n_chain,
                                    mean_warmup_leapfrogs, mean_leapfrogs,
                                    min(bulk_ess_per_iter), min(tail_ess_per_iter), min(bulk_ess_per_leapfrog), min(tail_ess_per_leapfrog)))
-    row.names(res) <- c("warmup.leapfrogs", "leapfrogs",
-                        "mean.warmup.leapfrogs", "mean.leapfrogs",
+    row.names(res) <- c("leapfrogs(warmup)", "leapfrogs",
+                        "leapfrogs(warmup)/iter", "leapfrogs/iter",
                         "min(bulk_ess/iter)", "min(tail_ess/iter)", "min(bulk_ess/leapfrog)", "min(tail_ess/leapfrog)")
     return(res)
 }
@@ -41,17 +41,17 @@ run.cc.metric <- function(modelpath, model, metric, seed, init, adapt.arg="") {
 
     if (missing(init)) {
         ## system(paste("mpiexec -n 8 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
-        system(paste("mpiexec -n 8 -l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
-        fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-7].output.csv", full.name=TRUE))
-        system(paste("for i in {0..7}; do ./", model, " sample max_num_warmup=300 save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed, " output file=$i.output.csv id=$i;done", " ",sep=""))
-        fit.seq <- rstan::read_stan_csv(dir(pattern="^[0-7].output.csv", full.name=TRUE))
+        system(paste("mpiexec -bind-to core -n 4 -l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
+        fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
+        system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
+        fit.seq <- rstan::read_stan_csv(dir(pattern="^seq.[0-3].output.csv", full.name=TRUE))
         summary <- data.frame(perf.cc(fit.mpi), perf.cc(fit.seq))
         colnames(summary) <- c(paste0("MPI.",metric), paste0("regular.",metric))        
     } else {
-        system(paste("mpiexec -n 8 -l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep=""))
-        fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-7].output.csv", full.name=TRUE))
-        system(paste("for i in {0..7}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " init=mpi.$i.", init, " random seed=", seed, " output file=$i.output.csv id=$i;done", " ",sep=""))
-        fit.seq <- rstan::read_stan_csv(dir(pattern="^[0-7].output.csv", full.name=TRUE))
+        system(paste("mpiexec -bind-to core -n 4 -l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep=""))
+        fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
+        system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " init=mpi.$i.", init, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
+        fit.seq <- rstan::read_stan_csv(dir(pattern="^seq.[0-3].output.csv", full.name=TRUE))
         summary <- data.frame(perf.cc(fit.mpi), perf.cc(fit.seq))
         colnames(summary) <- c(paste0("MPI.",metric), paste0("regular.",metric))
     }
@@ -61,16 +61,22 @@ run.cc.metric <- function(modelpath, model, metric, seed, init, adapt.arg="") {
 }
 
 ## run cross-chain & regular warmup for both diag & dense metric
-run.cc <- function(modelpath, model, init, adapt.arg="") {
-    seed = sample(999999:9999999, 1)
+run.cc <- function(modelpath, model, init, seed, adapt.arg="") {
+    rng.seed = sample(999999:9999999, 1)
+    if (!missing(seed)) {
+        rng.seed = seed
+    }
 
-    fits.diag  <- run.cc.metric(modelpath, model, "diag_e",  seed, init, adapt.arg)
-    fits.dense <- run.cc.metric(modelpath, model, "dense_e", seed, init, adapt.arg)
+    ## seed = sample(999999:9999999, 1)
+
+    fits.diag  <- run.cc.metric(modelpath, model, "diag_e",  rng.seed, init, adapt.arg)
+    fits.dense <- run.cc.metric(modelpath, model, "dense_e", rng.seed, init, adapt.arg)
 
     library("gridExtra")
     library("bayesplot")
     library("dplyr")
 
+    ## print out divergence diagno summary
     pdf(file.path(modelpath, model, "cross_chain_summary.pdf"), paper="a4")
     grid.table(format(cbind(fits.diag[["summary"]], fits.dense[["summary"]]), digits=3))
     lp <- log_posterior(fits.diag[["mpi"]])
@@ -101,7 +107,7 @@ run.cc <- function(modelpath, model, init, adapt.arg="") {
         dplyr::filter(grepl('',rowname))%>%
         ggplot2::ggplot(ggplot2::aes(x=metric,y=val,fill=type)) +
         ggplot2::geom_bar(stat = 'identity',position = ggplot2::position_dodge()) +
-        ggplot2::facet_wrap(~rowname,scales='free')
+        ggplot2::facet_wrap(~rowname,scales='free',ncol=2)
 
     ggplot2::ggsave(file=file.path(modelpath, model, "cross_chain_summary.png"))
 
