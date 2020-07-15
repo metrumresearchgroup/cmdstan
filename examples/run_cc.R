@@ -24,8 +24,8 @@ perf.cc <- function(stanfit) {
     res <- data.frame(run = c(sum_warmup_leapfrogs / n_chain, sum_leapfrogs / n_chain,
                                    mean_warmup_leapfrogs, mean_leapfrogs,
                                    min(bulk_ess_per_iter), min(tail_ess_per_iter), min(bulk_ess_per_leapfrog), min(tail_ess_per_leapfrog)))
-    row.names(res) <- c("leapfrogs(warmup)", "leapfrogs",
-                        "leapfrogs(warmup)/iter", "leapfrogs/iter",
+    row.names(res) <- c("leapfrogs(warmup)", "leapfrogs(sampling)",
+                        "leapfrogs(warmup)/iter", "leapfrogs(sampling)/iter",
                         "min(bulk_ess/iter)", "min(tail_ess/iter)", "min(bulk_ess/leapfrog)", "min(tail_ess/leapfrog)")
     return(res)
 }
