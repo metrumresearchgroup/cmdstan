@@ -19,19 +19,155 @@ perf.cc <- function(stanfit) {
     min(tail_ess_per_iter)
     min(bulk_ess_per_leapfrog)
     min(tail_ess_per_leapfrog)
+    elapsed <- as.data.frame(rstan::get_elapsed_time(stanfit))
     (stepsizes = sapply(sampler_params, function(x) x[, "stepsize__"])[n_iter,])
 
     res <- data.frame(run = c(sum_warmup_leapfrogs / n_chain, sum_leapfrogs / n_chain,
                                    mean_warmup_leapfrogs, mean_leapfrogs,
-                                   min(bulk_ess_per_iter), min(tail_ess_per_iter), min(bulk_ess_per_leapfrog), min(tail_ess_per_leapfrog)))
+                                   min(bulk_ess_per_iter),
+                              min(tail_ess_per_iter),
+                              min(bulk_ess_per_leapfrog),
+                              min(tail_ess_per_leapfrog),
+                              max(elapsed$warmup + elapsed$sample)))
     row.names(res) <- c("leapfrogs(warmup)", "leapfrogs(sampling)",
                         "leapfrogs(warmup)/iter", "leapfrogs(sampling)/iter",
-                        "min(bulk_ess/iter)", "min(tail_ess/iter)", "min(bulk_ess/leapfrog)", "min(tail_ess/leapfrog)")
+                        "min(bulk_ess/iter)", "min(tail_ess/iter)",
+                        "min(bulk_ess/leapfrog)", "min(tail_ess/leapfrog)",
+                        "max(elapsed_time)")
+    return(res)
+}
+
+## run mpi cross chain job
+run.mpi <- function(modelpath, model, metric, np, hostfile, seed, init, adapt.arg="") {
+    model.file = paste(model,"stan", sep="")
+    data.file = paste(model,".data.R", sep="")
+    system(paste("make -j4 ", file.path(modelpath, model, model), sep=""))
+
+    cmdwd <- getwd();
+    setwd(file.path(modelpath, model))
+
+    rng.seed = sample(1:999999, 1)
+    if (!missing(seed)) {
+        rng.seed = seed
+    }
+
+    if (missing(init)) {
+        ## system(paste("mpiexec -n 8 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
+        run.string <- paste("mpiexec -bind-to core -n ",np," -l -f ", hostfile, " ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep="")
+        print(run.string)
+        system(run.string)
+        fit <- rstan::read_stan_csv(dir(pattern="mpi.[0-9]*.output.csv", full.name=TRUE))
+        summary <- data.frame(perf.cc(fit))
+    } else {
+        run.string <- paste("mpiexec -bind-to core -n ",np," -l -f ", hostfile, " ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep="")
+        print(run.string)
+        system(run.string)
+        fit <- rstan::read_stan_csv(dir(pattern="mpi.[0-9]*.output.csv", full.name=TRUE))
+        summary <- data.frame(perf.cc(fit))
+    }
+    setwd(cmdwd)
+    return(summary)
+}
+
+## here seed is a sequence, with each member fed to one MPI run
+multiple.run.mpi <- function(modelpath, model, metric, np, hostfile, seed, init, adapt.arg="") {
+    if (missing(init)) {
+        res <- lapply(seed, function(s) {run.mpi(modelpath, model, metric, np, hostfile, s, adapt.arg=adapt.arg)})
+    } else {
+        res <- lapply(seed, function(s) {run.mpi(modelpath, model, metric, np, hostfile, s, init, adapt.arg=adapt.arg)})
+    }
+    summary <- do.call(cbind, res)
+    n <- ncol(summary)
+    summary$avg <- apply(summary[,1:n], 1, mean)
+    summary$sd <- apply(summary[,1:n], 1, sd)
+    return(summary)
+}
+
+## run mpi cross chain job
+run.seq <- function(modelpath, model, metric, nchain, hostfile, seed, init) {
+    model.file = paste(model,"stan", sep="")
+    data.file = paste(model,".data.R", sep="")
+    system(paste("make -j4 ", file.path(modelpath, model, model), sep=""))
+
+    cmdwd <- getwd();
+    setwd(file.path(modelpath, model))
+
+    rng.seed = sample(1:999999, 1)
+    if (!missing(seed)) {
+        rng.seed = seed
+    }
+
+    mpi.string  <- paste("mpiexec -bind-to core -f ", hostfile)
+    app.string.1 <- paste0(" -n 1 ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed)
+    if (missing(init)) {
+        app.string <- paste(sapply(1:nchain, function(chain) {
+            paste0(app.string.1,
+                   " output file=", paste0("seq.", chain, ".output.csv"),
+                   " id=", chain) }), collapse=" :")
+        print(paste0(mpi.string, app.string))
+        system(paste0(mpi.string, app.string))
+        fit <- rstan::read_stan_csv(dir(pattern="^seq.[0-9]*.output.csv", full.name=TRUE))
+        summary <- data.frame(perf.cc(fit))
+    } else {
+        app.string <- paste(sapply(1:nchain, function(chain) {
+            paste0(app.string.1, paste(" init=", "mpi.", chain, init),
+                   " output file=", paste0("seq.", chain, ".output.csv"),
+                   " id=", chain) }), collapse=" :")
+        print(paste0(mpi.string, app.string))
+        system(paste0(mpi.string, app.string))
+        fit <- rstan::read_stan_csv(dir(pattern="^seq.[0-9]*.output.csv", full.name=TRUE))
+        summary <- data.frame(perf.cc(fit))
+    }
+    setwd(cmdwd)
+    return(summary)
+}
+
+## here seed is a sequence, with each member fed to one MPI run
+multiple.run.seq <- function(modelpath, model, metric, np, hostfile, seed, init) {
+    if (missing(init)) {
+        res <- lapply(seed, function(s) {run.seq(modelpath, model, metric, np, hostfile, s)})
+    } else {
+        res <- lapply(seed, function(s) {run.seq(modelpath, model, metric, np, hostfile, s, init)})
+    }
+    summary <- do.call(cbind, res)
+    n <- ncol(summary)
+    summary$avg <- apply(summary[,1:n], 1, mean)
+    summary$sd <- apply(summary[,1:n], 1, sd)
+    return(summary)
+}
+
+multiple.run.summary <- function(modelpath, model, np, hostfile, seed, init, adapt.arg="") {
+    res.mpi.diag <- multiple.run.mpi(modelpath, model, "diag_e", np, hostfile, seed, init, adapt.arg)
+    res.mpi.diag$metric <- "diag_e"
+    res.mpi.diag$Stan_run <- "cross_chain"
+    res.seq.diag <- multiple.run.seq(modelpath, model, "diag_e", np, hostfile, seed, init)
+    res.seq.diag$metric <- "diag_e"
+    res.seq.diag$Stan_run <- "regular"
+
+    res.mpi.dense <- multiple.run.mpi(modelpath, model, "dense_e", np, hostfile, seed, init, adapt.arg)
+    res.mpi.dense$metric <- "dense_e"
+    res.mpi.dense$Stan_run <- "cross_chain"
+    res.seq.dense <- multiple.run.seq(modelpath, model, "dense_e", np, hostfile, seed, init)
+    res.seq.dense$metric <- "dense_e"
+    res.seq.dense$Stan_run <- "regular"
+
+    res <- do.call(rbind, lapply(list(res.mpi.diag, res.seq.diag, res.mpi.dense, res.seq.dense),
+                                 function(x) {y <- data.frame(row.names(x), x$avg, x$sd, x$metric, x$Stan_run);names(y) <- c("performance", "avg", "sd", "metric", "run");return(y)}))
+
+    library("ggplot2")
+    ggplot(res, aes(x=metric)) + geom_bar(aes(y=avg,fill=run),position=position_dodge(0.8),stat="identity",alpha=0.7,width=0.8) + geom_errorbar(aes(ymin=avg-sd,ymax=avg+sd,group=run),colour="black",alpha=0.4,size=0.4,width=0.3,position=position_dodge(0.8)) +
+        facet_wrap(performance ~ ., scales="free_y")
+    ## ggplot(res, aes(x=metric, weight=avg, ymin=avg-sd, ymax=avg+sd,fill=run)) +
+    ##     geom_bar(aes(y=avg),position = "dodge", stat="identity", alpha=0.7, width=0.8) +
+    ##     geom_errorbar(colour="black", alpha=0.3, size=0.5, width=0.3, position=position_dodge(0.8)) +
+    ##     facet_wrap(performance ~ ., scales="free_y")
+    ggsave(file=file.path(modelpath, model, "cross_chain_summary.png"))
+
     return(res)
 }
 
 ## run both cross-chain & regular warmup version and output summary
-run.cc.metric <- function(modelpath, model, metric, seed, init, adapt.arg="") {
+run.cc.metric <- function(modelpath, model, metric, np, seed, init, adapt.arg="") {
     model.file = paste(model,"stan", sep="")
     data.file = paste(model,".data.R", sep="")
     system(paste("make -j4 ", file.path(modelpath, model, model), sep=""))
@@ -41,14 +177,14 @@ run.cc.metric <- function(modelpath, model, metric, seed, init, adapt.arg="") {
 
     if (missing(init)) {
         ## system(paste("mpiexec -n 8 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
-        system(paste("mpiexec -bind-to core -n 4 -l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
+        system(paste("mpiexec -bind-to core -n",np,"-l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
         fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
         system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
         fit.seq <- rstan::read_stan_csv(dir(pattern="^seq.[0-3].output.csv", full.name=TRUE))
         summary <- data.frame(perf.cc(fit.mpi), perf.cc(fit.seq))
         colnames(summary) <- c(paste0("MPI.",metric), paste0("regular.",metric))        
     } else {
-        system(paste("mpiexec -bind-to core -n 4 -l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep=""))
+        system(paste("mpiexec -bind-to core -n",np,"-l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep=""))
         fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
         system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " init=mpi.$i.", init, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
         fit.seq <- rstan::read_stan_csv(dir(pattern="^seq.[0-3].output.csv", full.name=TRUE))
@@ -62,7 +198,7 @@ run.cc.metric <- function(modelpath, model, metric, seed, init, adapt.arg="") {
 
 ## run cross-chain & regular warmup for both diag & dense metric
 run.cc <- function(modelpath, model, init, seed, adapt.arg="") {
-    rng.seed = sample(999999:9999999, 1)
+    rng.seed = sample(1:999999, 1)
     if (!missing(seed)) {
         rng.seed = seed
     }
