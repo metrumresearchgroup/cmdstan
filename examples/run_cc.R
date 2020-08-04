@@ -170,25 +170,42 @@ multiple.run.ess <- function(modelpath, model, np, hostfile, seed, target.ess)
                            function(ess) {
                                res  <- multiple.run.mpi(modelpath, model, "diag_e", np, hostfile, seed,
                                                         adapt.arg=paste0("cross_chain_ess=",ess))
-                               res$target_ess <- toString(ess)
+                               res$Stan_run <- paste0("cross chain: target ess=",ess)
                                res$metric <- "diag_e"
-                               res <- data.frame(row.names(res), res$avg, res$sd, res$metric, res$target_ess)
+                               res <- data.frame(row.names(res), res$avg, res$sd, res$metric, res$Stan_run)
                                return(res)
                            })
+    res.mpi.diag <- do.call(rbind,res.mpi.diag)
+    names(res.mpi.diag) <- c("performance", "avg", "sd", "metric", "run")
+
     res.mpi.dense <- lapply(target.ess,
                            function(ess) {
                                res  <- multiple.run.mpi(modelpath, model, "dense_e", np, hostfile, seed,
                                                         adapt.arg=paste0("cross_chain_ess=",ess))
-                               res$target_ess <- toString(ess)
+                               res$Stan_run <- paste0("cross chain: target ess=",ess)
                                res$metric <- "dense_e"
-                               res <- data.frame(row.names(res), res$avg, res$sd, res$metric, res$target_ess)
+                               res <- data.frame(row.names(res), res$avg, res$sd, res$metric, res$Stan_run)
                                return(res)
                            })
-    res <- rbind(do.call(rbind,res.mpi.diag), do.call(rbind,res.mpi.dense)) 
-    names(res) <- c("performance", "avg", "sd", "metric", "target_ess")
+    res.mpi.dense <- do.call(rbind,res.mpi.dense)
+    names(res.mpi.dense) <- c("performance", "avg", "sd", "metric", "run")
+
+    res.seq.diag <- multiple.run.seq(modelpath, model, "diag_e", np, hostfile, seed)
+    res.seq.diag$metric <- "diag_e"
+    res.seq.diag$Stan_run <- "regular"
+    res.seq.diag <- data.frame(row.names(res.seq.diag), res.seq.diag$avg, res.seq.diag$sd, res.seq.diag$metric, res.seq.diag$Stan_run)
+    names(res.seq.diag) <- c("performance", "avg", "sd", "metric", "run")
+
+    res.seq.dense <- multiple.run.seq(modelpath, model, "dense_e", np, hostfile, seed)
+    res.seq.dense$metric <- "dense_e"
+    res.seq.dense$Stan_run <- "regular"
+    res.seq.dense <- data.frame(row.names(res.seq.dense), res.seq.dense$avg, res.seq.dense$sd, res.seq.dense$metric, res.seq.dense$Stan_run)
+    names(res.seq.dense) <- c("performance", "avg", "sd", "metric", "run")
+
+    res <- rbind(res.mpi.diag, res.mpi.dense, res.seq.diag, res.seq.dense)
 
     library("ggplot2")
-    ggplot(res, aes(x=metric)) + geom_bar(aes(y=avg,fill=target_ess),position=position_dodge(0.8),stat="identity",alpha=0.7,width=0.8) + geom_errorbar(aes(ymin=avg-sd,ymax=avg+sd,group=target_ess),colour="black",alpha=0.4,size=0.4,width=0.3,position=position_dodge(0.8)) +
+    ggplot(res, aes(x=metric)) + geom_bar(aes(y=avg,fill=run),position=position_dodge(0.8),stat="identity",alpha=0.7,width=0.8) + geom_errorbar(aes(ymin=avg-sd,ymax=avg+sd,group=run),colour="black",alpha=0.4,size=0.4,width=0.3,position=position_dodge(0.8)) +
         facet_wrap(performance ~ ., scales="free_y")
     ggsave(file=file.path(modelpath, model, "cross_chain_ess_effect.png"))
 
