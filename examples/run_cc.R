@@ -98,7 +98,7 @@ run.seq <- function(modelpath, model, metric, nchain, hostfile, seed, init) {
     }
 
     mpi.string  <- paste("mpiexec -bind-to core -f ", hostfile)
-    app.string.1 <- paste0(" -n 1 ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed)
+    app.string.1 <- paste0(" -n 1 ./", model, "_seq", " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed)
     if (missing(init)) {
         app.string <- paste(sapply(1:nchain, function(chain) {
             paste0(app.string.1,
@@ -157,11 +157,40 @@ multiple.run.summary <- function(modelpath, model, np, hostfile, seed, init, ada
     library("ggplot2")
     ggplot(res, aes(x=metric)) + geom_bar(aes(y=avg,fill=run),position=position_dodge(0.8),stat="identity",alpha=0.7,width=0.8) + geom_errorbar(aes(ymin=avg-sd,ymax=avg+sd,group=run),colour="black",alpha=0.4,size=0.4,width=0.3,position=position_dodge(0.8)) +
         facet_wrap(performance ~ ., scales="free_y")
-    ## ggplot(res, aes(x=metric, weight=avg, ymin=avg-sd, ymax=avg+sd,fill=run)) +
-    ##     geom_bar(aes(y=avg),position = "dodge", stat="identity", alpha=0.7, width=0.8) +
-    ##     geom_errorbar(colour="black", alpha=0.3, size=0.5, width=0.3, position=position_dodge(0.8)) +
-    ##     facet_wrap(performance ~ ., scales="free_y")
     ggsave(file=file.path(modelpath, model, "cross_chain_summary.png"))
+
+    return(res)
+}
+
+## effect of target ESS, "target.ess" is a sequence s.a c(100, 200, 400, 800)
+multiple.run.ess <- function(modelpath, model, np, hostfile, seed, target.ess)
+{
+    n <- length(seed)
+    res.mpi.diag <- lapply(target.ess,
+                           function(ess) {
+                               res  <- multiple.run.mpi(modelpath, model, "diag_e", np, hostfile, seed,
+                                                        adapt.arg=paste0("cross_chain_ess=",ess))
+                               res$target_ess <- toString(ess)
+                               res$metric <- "diag_e"
+                               res <- data.frame(row.names(res), res$avg, res$sd, res$metric, res$target_ess)
+                               return(res)
+                           })
+    res.mpi.dense <- lapply(target.ess,
+                           function(ess) {
+                               res  <- multiple.run.mpi(modelpath, model, "dense_e", np, hostfile, seed,
+                                                        adapt.arg=paste0("cross_chain_ess=",ess))
+                               res$target_ess <- toString(ess)
+                               res$metric <- "dense_e"
+                               res <- data.frame(row.names(res), res$avg, res$sd, res$metric, res$target_ess)
+                               return(res)
+                           })
+    res <- rbind(do.call(rbind,res.mpi.diag), do.call(rbind,res.mpi.dense)) 
+    names(res) <- c("performance", "avg", "sd", "metric", "target_ess")
+
+    library("ggplot2")
+    ggplot(res, aes(x=metric)) + geom_bar(aes(y=avg,fill=target_ess),position=position_dodge(0.8),stat="identity",alpha=0.7,width=0.8) + geom_errorbar(aes(ymin=avg-sd,ymax=avg+sd,group=target_ess),colour="black",alpha=0.4,size=0.4,width=0.3,position=position_dodge(0.8)) +
+        facet_wrap(performance ~ ., scales="free_y")
+    ggsave(file=file.path(modelpath, model, "cross_chain_ess_effect.png"))
 
     return(res)
 }
