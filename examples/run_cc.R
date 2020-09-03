@@ -31,8 +31,8 @@ perf.cc <- function(stanfit) {
                               max(elapsed$warmup + elapsed$sample)))
     row.names(res) <- c("leapfrogs(warmup)", "leapfrogs(sampling)",
                         "leapfrogs(warmup)/iter", "leapfrogs(sampling)/iter",
-                        "min(bulk_ess/iter)", "min(tail_ess/iter)",
-                        "min(bulk_ess/leapfrog)", "min(tail_ess/leapfrog)",
+                        "min(bulk_ESS/iter)", "min(tail_ESS/iter)",
+                        "min(bulk_ESS/leapfrog)", "min(tail_ESS/leapfrog)",
                         "max(elapsed_time)")
     return(res)
 }
@@ -206,7 +206,8 @@ multiple.run.ess <- function(modelpath, model, np, hostfile, seed, target.ess)
 
     library("ggplot2")
     ggplot(res, aes(x=metric)) + geom_bar(aes(y=avg,fill=run),position=position_dodge(0.8),stat="identity",alpha=0.7,width=0.8) + geom_errorbar(aes(ymin=avg-sd,ymax=avg+sd,group=run),colour="black",alpha=0.4,size=0.4,width=0.3,position=position_dodge(0.8)) +
-        facet_wrap(performance ~ ., scales="free_y")
+        facet_wrap(performance ~ ., scales="free_y") +
+        theme(legend.position="bottom") + guides(fill=guide_legend(nrow=2,byrow=TRUE))
     ggsave(file=file.path(modelpath, model, "cross_chain_ess_effect.png"))
 
     return(res)
