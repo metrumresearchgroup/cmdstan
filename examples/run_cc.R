@@ -163,13 +163,13 @@ multiple.run.summary <- function(modelpath, model, np, hostfile, seed, init, ada
 }
 
 ## effect of target ESS, "target.ess" is a sequence s.a c(100, 200, 400, 800)
-multiple.run.ess <- function(modelpath, model, np, hostfile, seed, target.ess)
+multiple.run.ess <- function(modelpath, model, np, nchains, hostfile, seed, target.ess)
 {
     n <- length(seed)
     res.mpi.diag <- lapply(target.ess,
                            function(ess) {
                                res  <- multiple.run.mpi(modelpath, model, "diag_e", np, hostfile, seed,
-                                                        adapt.arg=paste0("cross_chain_ess=",ess))
+                                                        adapt.arg=paste0("num_cross_chains=",nchains," cross_chain_ess=",ess))
                                res$Stan_run <- paste0("cross chain: target ess=",ess)
                                res$metric <- "diag_e"
                                res <- data.frame(row.names(res), res$avg, res$sd, res$metric, res$Stan_run)
