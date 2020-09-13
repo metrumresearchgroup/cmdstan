@@ -53,28 +53,28 @@ run.mpi <- function(modelpath, model, metric, np, hostfile, seed, init, adapt.ar
 
     if (missing(init)) {
         ## system(paste("mpiexec -n 8 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
-        run.string <- paste("mpiexec -bind-to core -n ",np," -l -f ", hostfile, " ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep="")
+        run.string <- paste("mpiexec -bind-to socket -n ",np," -l -f ", hostfile, " ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep="")
         print(run.string)
         system(run.string)
         fit <- rstan::read_stan_csv(dir(pattern="mpi.[0-9]*.output.csv", full.name=TRUE))
         summary <- data.frame(perf.cc(fit))
     } else {
-        run.string <- paste("mpiexec -bind-to core -n ",np," -l -f ", hostfile, " ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep="")
+        run.string <- paste("mpiexec -bind-to socket -n ",np," -l -f ", hostfile, " ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep="")
         print(run.string)
         system(run.string)
         fit <- rstan::read_stan_csv(dir(pattern="mpi.[0-9]*.output.csv", full.name=TRUE))
         summary <- data.frame(perf.cc(fit))
     }
     setwd(cmdwd)
-    return(summary)
+    return(list(fit, summary))
 }
 
 ## here seed is a sequence, with each member fed to one MPI run
 multiple.run.mpi <- function(modelpath, model, metric, np, hostfile, seed, init, adapt.arg="") {
     if (missing(init)) {
-        res <- lapply(seed, function(s) {run.mpi(modelpath, model, metric, np, hostfile, s, adapt.arg=adapt.arg)})
+        res <- lapply(seed, function(s) {run.mpi(modelpath, model, metric, np, hostfile, s, adapt.arg=adapt.arg)[[1]]})
     } else {
-        res <- lapply(seed, function(s) {run.mpi(modelpath, model, metric, np, hostfile, s, init, adapt.arg=adapt.arg)})
+        res <- lapply(seed, function(s) {run.mpi(modelpath, model, metric, np, hostfile, s, init, adapt.arg=adapt.arg)[[1]]})
     }
     summary <- do.call(cbind, res)
     n <- ncol(summary)
@@ -162,7 +162,7 @@ multiple.run.summary <- function(modelpath, model, np, hostfile, seed, init, ada
     return(res)
 }
 
-## effect of target ESS, "target.ess" is a sequence s.a c(100, 200, 400, 800)
+## effect of target ESS, "target.ess" is a sequence, e.g. c(100, 200, 400, 800)
 multiple.run.ess <- function(modelpath, model, np, nchains, hostfile, seed, target.ess)
 {
     n <- length(seed)
@@ -223,7 +223,6 @@ run.cc.metric <- function(modelpath, model, metric, np, seed, init, adapt.arg=""
     setwd(file.path(modelpath, model))
 
     if (missing(init)) {
-        ## system(paste("mpiexec -n 8 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
         system(paste("mpiexec -bind-to core -n",np,"-l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
         fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
         system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
