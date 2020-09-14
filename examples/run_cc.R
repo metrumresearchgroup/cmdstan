@@ -97,7 +97,7 @@ run.seq <- function(modelpath, model, metric, nchain, hostfile, seed, init) {
         rng.seed = seed
     }
 
-    mpi.string  <- paste("mpiexec -bind-to core -f ", hostfile)
+    mpi.string  <- paste("mpiexec -bind-to socket -f ", hostfile)
     app.string.1 <- paste0(" -n 1 ./", model, "_seq", " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed)
     if (missing(init)) {
         app.string <- paste(sapply(1:nchain, function(chain) {
@@ -110,16 +110,16 @@ run.seq <- function(modelpath, model, metric, nchain, hostfile, seed, init) {
         summary <- data.frame(perf.cc(fit))
     } else {
         app.string <- paste(sapply(1:nchain, function(chain) {
-            paste0(app.string.1, paste(" init=", "mpi.", chain, init),
+            paste0(app.string.1, paste0(" init=", "mpi.", chain-1, ".",init),
                    " output file=", paste0("seq.", chain, ".output.csv"),
                    " id=", chain) }), collapse=" :")
         print(paste0(mpi.string, app.string))
         system(paste0(mpi.string, app.string))
-        fit <- rstan::read_stan_csv(dir(pattern="^seq.[0-9]*.output.csv", full.name=TRUE))
+        fit <- rstan::read_stan_csv(dir(pattern="seq.[0-9]*.output.csv", full.name=TRUE))
         summary <- data.frame(perf.cc(fit))
     }
     setwd(cmdwd)
-    return(summary)
+    return(list(fit,summary))
 }
 
 ## here seed is a sequence, with each member fed to one MPI run
@@ -162,7 +162,7 @@ multiple.run.summary <- function(modelpath, model, np, hostfile, seed, init, ada
     return(res)
 }
 
-## effect of target ESS, "target.ess" is a sequence, e.g. c(100, 200, 400, 800)
+## effect of target ESS, "target.ess" is a sequence s.a c(100, 200, 400, 800)
 multiple.run.ess <- function(modelpath, model, np, nchains, hostfile, seed, target.ess)
 {
     n <- length(seed)
@@ -223,6 +223,7 @@ run.cc.metric <- function(modelpath, model, metric, np, seed, init, adapt.arg=""
     setwd(file.path(modelpath, model))
 
     if (missing(init)) {
+        ## system(paste("mpiexec -n 8 -l -bind-to core ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
         system(paste("mpiexec -bind-to core -n",np,"-l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " random seed=", seed, " ",sep=""))
         fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
         system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
@@ -232,14 +233,14 @@ run.cc.metric <- function(modelpath, model, metric, np, seed, init, adapt.arg=""
     } else {
         system(paste("mpiexec -bind-to core -n",np,"-l ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " adapt ", adapt.arg, " data file=", data.file, " init=", init, " random seed=", seed, " ",sep=""))
         fit.mpi <- rstan::read_stan_csv(dir(pattern="mpi.[0-3].output.csv", full.name=TRUE))
-        system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " init=mpi.$i.", init, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
-        fit.seq <- rstan::read_stan_csv(dir(pattern="^seq.[0-3].output.csv", full.name=TRUE))
-        summary <- data.frame(perf.cc(fit.mpi), perf.cc(fit.seq))
-        colnames(summary) <- c(paste0("MPI.",metric), paste0("regular.",metric))
+        ## system(paste("for i in {0..3}; do ./", model, " sample save_warmup=1 algorithm=hmc metric=", metric, " data file=", data.file, " init=mpi.$i.", init, " random seed=", seed, " output file=seq.$i.output.csv id=$i;done", " ",sep=""))
+        ## fit.seq <- rstan::read_stan_csv(dir(pattern="^seq.[0-3].output.csv", full.name=TRUE))
+        summary <- data.frame(perf.cc(fit.mpi))
+        colnames(summary) <- c(paste0("MPI.",metric))
     }
 
     setwd(cmdwd)
-    return(list(mpi=fit.mpi, seq=fit.seq, summary=summary))
+    return(list(mpi=fit.mpi, summary=summary))
 }
 
 ## run cross-chain & regular warmup for both diag & dense metric

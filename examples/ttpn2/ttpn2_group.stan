@@ -98,7 +98,7 @@ transformed parameters{
   x = pmx_solve_group_rk45(oneCptPNODE, 3, len,
                            time, amt, rate, ii, evid, cmt, addl, ss,
                            parms, rep_array(F, nId), rep_array(tLag, nId),
-                           1e-6, 1e-6, 1e8);
+                           1e-5, 1e-6, 1e5);
 
   for(i in 1:nPNObs)
     survObs[i] = fmax(machine_precision(), exp(-x[3, iPNObs[i]]));
