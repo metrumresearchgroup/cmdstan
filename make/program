@@ -44,11 +44,11 @@ endif
 	$(WINE) $(BINSTANC) $(STANCFLAGS) --o=$(subst  \,/,$@) $(subst  \,/,$<)
 
 .PRECIOUS: %.hpp
-%$(EXE) : %.hpp %.d $(CMDSTAN_MAIN_O) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS)
+%$(EXE) : %.hpp %.d $(CMDSTAN_MAIN_O) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS) $(CROSS_CHAIN_BOOST_TARGETS)
 	@echo ''
 	@echo '--- Compiling, linking C++ code ---'
 	$(COMPILE.cpp) $(CXXFLAGS_PROGRAM) -x c++ -o $(subst  \,/,$*).o $(subst \,/,$<)
-	$(LINK.cpp) $(subst \,/,$*.o) $(CMDSTAN_MAIN_O) $(LDLIBS) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS) $(subst \,/,$(OUTPUT_OPTION))
+	$(LINK.cpp) $(subst \,/,$*.o) $(CMDSTAN_MAIN_O) $(LDLIBS) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS) $(CROSS_CHAIN_BOOST_TARGETS) $(subst \,/,$(OUTPUT_OPTION))
 ifeq ($(OS),Windows_NT)
 ifneq ($(notdir $(shell where tbb.dll)),tbb.dll)
 	@echo 'Intel TBB is not in PATH.'

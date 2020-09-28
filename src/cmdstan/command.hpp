@@ -178,7 +178,7 @@ namespace cmdstan {
         try {
           double init_radius = boost::lexical_cast<double>(init);
         } catch (const boost::bad_lexical_cast& e) {
-          stan::services::util::set_cross_chain_file(init, num_cross_chains);
+          stan::services::util::set_cross_chain_init_file(init, num_cross_chains);
           stan::services::util::set_cross_chain_intra_file(init, num_cross_chains);
           dynamic_cast<string_argument*>(parser.arg("init")) -> set_value(init);
         }

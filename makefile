@@ -173,7 +173,7 @@ build-mpi: $(MPI_TARGETS)
 
 ifeq ($(CMDSTAN_SUBMODULES),1)
 .PHONY: build
-build: bin/stanc$(EXE) bin/stansummary$(EXE) bin/print$(EXE) bin/diagnose$(EXE) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS) $(CMDSTAN_MAIN_O)
+build: bin/stanc$(EXE) bin/stansummary$(EXE) bin/print$(EXE) bin/diagnose$(EXE) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS) $(CMDSTAN_MAIN_O) $(CROSS_CHAIN_BOOST_TARGETS)
 	@echo ''
 ifeq ($(OS),Windows_NT)
 		@echo 'NOTE: Please add $(TBB_BIN_ABSOLUTE_PATH) to your PATH variable.'
@@ -279,7 +279,7 @@ manual: src/docs/cmdstan-guide/cmdstan-guide.pdf
 
 .PHONY: compile_info
 compile_info:
-	@echo '$(LINK.cpp) $(CXXFLAGS_PROGRAM) $(CMDSTAN_MAIN_O) $(LDLIBS) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS)'
+	@echo '$(LINK.cpp) $(CXXFLAGS_PROGRAM) $(CMDSTAN_MAIN_O) $(LDLIBS) $(LIBSUNDIALS) $(MPI_TARGETS) $(TBB_TARGETS) $(CROSS_CHAIN_BOOST_TARGETS)'
 
 ##
 # Debug target that allows you to print a variable
