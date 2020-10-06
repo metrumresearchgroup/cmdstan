@@ -1,0 +1,10 @@
+#!/bin/bash
+#
+# run from stan_math with qsub -pe orte num_of_slots script_name.qsub
+#
+#$ -V
+#$ -cwd
+#$ -j y
+#$ -S /bin/bash
+
+./ttpn2_group sample data file=ttpn2.data.R init=ttpn2.init.R output file=seq.1.output.csv random seed=12345 id=1
