@@ -3,7 +3,7 @@
 
 #include <cmdstan/arguments/singleton_argument.hpp>
 #ifdef MPI_ADAPTED_WARMUP
-#include <stan/math/mpi/environment.hpp>
+#include <stan/math/torsten/mpi.hpp>
 #endif
 
 namespace cmdstan {
