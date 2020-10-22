@@ -18,8 +18,8 @@ help:
 
 -include $(HOME)/.config/stan/make.local  # user-defined variables
 -include make/local                       # user-defined variables
-include make/torsten_stanc.mk
-include make/mpi_warmup.mk
+-include make/torsten_stanc.mk
+-include make/mpi_warmup.mk
 
 STAN ?= stan/
 MATH ?= $(STAN)lib/stan_math/
@@ -219,9 +219,9 @@ clean-deps:
 	@echo '  removing dependency files'
 	$(RM) $(call findfiles,src,*.d) $(call findfiles,src/stan,*.d) $(call findfiles,$(MATH)/stan,*.d) $(call findfiles,$(STAN)/src/stan/,*.d)
 	$(RM) $(call findfiles,src,*.d.*) $(call findfiles,src/stan,*.d.*) $(call findfiles,$(MATH)/stan,*.d.*)
-	$(RM) -r $(call findfiles,src,*.dSYM) $(call findfiles,src/stan,*.dSYM) $(call findfiles,$(MATH)/stan,*.dSYM)
+	$(RM) $(call findfiles,src,*.dSYM) $(call findfiles,src/stan,*.dSYM) $(call findfiles,$(MATH)/stan,*.dSYM)
 
-clean-all: clean clean-deps clean-libraries
+clean-all: clean clean-deps clean-libraries clean-cross-chain-boost-libs
 	$(RM) bin/stanc$(EXE) bin/stanc2$(EXE) bin/stansummary$(EXE) bin/print$(EXE) bin/diagnose$(EXE)
 	$(RM) -r src/cmdstan/main*.o bin/cmdstan
 	$(RM) $(wildcard $(STAN)src/stan/model/model_header*.hpp.gch)

@@ -58,7 +58,11 @@
 #endif
 
 // Torsten cross-chain
+#ifdef MPI_ADAPTED_WARMUP
+#include <stan/math/torsten/mpi.hpp>
+#include <stan/callbacks/mpi_stream_writer.hpp>
 TORSTEN_MPI_SESSION_INIT;
+#endif
 
 // forward declaration for function defined in another translation unit
 stan::model::model_base &new_model(stan::io::var_context &data_context,
