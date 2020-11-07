@@ -58,7 +58,7 @@
 #endif
 
 // Torsten cross-chain
-#ifdef MPI_ADAPTED_WARMUP
+#if defined (MPI_ADAPTED_WARMUP) || defined (TORSTEN_MPI)
 #include <stan/math/torsten/mpi.hpp>
 #include <stan/callbacks/mpi_stream_writer.hpp>
 TORSTEN_MPI_SESSION_INIT;
