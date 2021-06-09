@@ -3,6 +3,8 @@
 
 #include <cmdstan/arguments/arg_method.hpp>
 #include <cmdstan/arguments/argument.hpp>
+#include <cmdstan/write_stan.hpp>
+#include <cmdstan/write_stan_flags.hpp>
 #include <stan/services/error_codes.hpp>
 #include <cstring>
 #include <string>
@@ -86,6 +88,11 @@ class argument_parser {
         print_help(info, true);
         _help_flag |= true;
         args.clear();
+      } else if (cat_name == "info") {
+        _help_flag |= true;
+        write_stan(info);
+        write_stan_flags(info);
+        return stan::services::error_codes::OK;
       }
 
       if (_help_flag) {
@@ -95,7 +102,12 @@ class argument_parser {
 
       if (!good_arg) {
         err(cat_name + " is either mistyped or misplaced.");
-
+#ifndef STAN_OPENCL
+        if (cat_name == "opencl") {
+          err("Re-compile the model with STAN_OPENCL to use OpenCL CmdStan "
+              "arguments.");
+        }
+#endif
         std::vector<std::string> valid_paths;
 
         for (size_t i = 0; i < _arguments.size(); ++i) {
