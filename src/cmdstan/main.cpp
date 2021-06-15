@@ -1,13 +1,15 @@
 #include <cmdstan/command.hpp>
 #include <stan/services/error_codes.hpp>
-#include <boost/exception/diagnostic_information.hpp> 
-#include <boost/exception_ptr.hpp>
 
-int main(int argc, const char* argv[]) {
+int main(int argc, const char *argv[]) {
   try {
-    return cmdstan::command<stan_model>(argc,argv);
-  } catch (const std::exception& e) {
-    std::cout << e.what() << std::endl;
-    return stan::services::error_codes::SOFTWARE;
+    int err_code = cmdstan::command(argc, argv);
+    if (err_code == 0)
+      return cmdstan::return_codes::OK;
+    else
+      return cmdstan::return_codes::NOT_OK;
+  } catch (const std::exception &e) {
+    std::cerr << e.what() << std::endl;
+    return cmdstan::return_codes::NOT_OK;
   }
 }
