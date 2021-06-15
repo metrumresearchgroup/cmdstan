@@ -133,6 +133,7 @@ include make/tests
 include make/command
 
 CMDSTAN_VERSION := 2.27.0
+TORSTEN_VERSION := 0.89.0rc
 
 ifeq ($(OS),Windows_NT)
 HELP_MAKE=mingw32-make
@@ -257,6 +258,7 @@ ifeq ($(OS),Windows_NT)
 		@echo 'to automatically update your user configuration.'
 endif
 	@echo '--- CmdStan v$(CMDSTAN_VERSION) built ---'
+	@echo '--- Torsten v$(TORSTEN_VERSION) built ---'
 else
 .PHONY: build
 build:
