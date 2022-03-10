@@ -35,6 +35,7 @@
 #include <stan/services/diagnose/diagnose.hpp>
 #include <stan/services/experimental/advi/fullrank.hpp>
 #include <stan/services/experimental/advi/meanfield.hpp>
+#include <stan/services/em/hmc_nuts_dense_e_adapt.hpp>
 #include <stan/services/optimize/bfgs.hpp>
 #include <stan/services/optimize/lbfgs.hpp>
 #include <stan/services/optimize/newton.hpp>
@@ -342,6 +343,32 @@ int command(int argc, const char *argv[]) {
     num_chains
         = get_arg_val<int_argument>(parser, "method", "sample", "num_chains");
     auto sample_arg = parser.arg("method")->arg("sample");
+    list_argument *algo
+        = dynamic_cast<list_argument *>(sample_arg->arg("algorithm"));
+    categorical_argument *adapt
+        = dynamic_cast<categorical_argument *>(sample_arg->arg("adapt"));
+    const bool adapt_engaged
+        = dynamic_cast<bool_argument *>(adapt->arg("engaged"))->value();
+    const bool is_hmc = algo->value() == "hmc";
+    if (num_chains > 1) {
+      if (is_hmc && adapt_engaged) {
+        list_argument *engine
+            = dynamic_cast<list_argument *>(algo->arg("hmc")->arg("engine"));
+        list_argument *metric
+            = dynamic_cast<list_argument *>(algo->arg("hmc")->arg("metric"));
+        if (engine->value() != "nuts"
+            && (metric->value() != "dense_e" || metric->value() == "diag_e")) {
+          throw std::invalid_argument(
+              "num_chains can currently only be used for NUTS with adaptation "
+              "and dense_e or diag_e metric");
+        }
+      }
+    }
+  }
+  if (user_method->arg("em")) {
+    num_chains
+        = get_arg_val<int_argument>(parser, "method", "em", "num_chains");
+    auto sample_arg = parser.arg("method")->arg("em");
     list_argument *algo
         = dynamic_cast<list_argument *>(sample_arg->arg("algorithm"));
     categorical_argument *adapt
@@ -1094,6 +1121,72 @@ int command(int argc, const char *argv[]) {
             logger, init_writers[0], sample_writers[0], diagnostic_writers[0]);
       }
     }
+  } else if (user_method->arg("em")) {
+    auto em_arg = parser.arg("method")->arg("em");
+    int num_warmup
+        = dynamic_cast<int_argument *>(em_arg->arg("num_warmup"))->value();
+    int num_samples
+        = dynamic_cast<int_argument *>(em_arg->arg("num_samples"))->value();
+    int num_thin
+        = dynamic_cast<int_argument *>(em_arg->arg("thin"))->value();
+    bool save_warmup
+        = dynamic_cast<bool_argument *>(em_arg->arg("save_warmup"))
+              ->value();
+    list_argument *algo
+        = dynamic_cast<list_argument *>(em_arg->arg("algorithm"));
+    categorical_argument *adapt
+        = dynamic_cast<categorical_argument *>(em_arg->arg("adapt"));
+    bool adapt_engaged
+        = dynamic_cast<bool_argument *>(adapt->arg("engaged"))->value();
+
+      list_argument *engine
+          = dynamic_cast<list_argument *>(algo->arg("hmc")->arg("engine"));
+
+      list_argument *metric
+          = dynamic_cast<list_argument *>(algo->arg("hmc")->arg("metric"));
+      string_argument *metric_file = dynamic_cast<string_argument *>(
+          algo->arg("hmc")->arg("metric_file"));
+      bool metric_supplied = !metric_file->is_default();
+      std::string metric_filename(
+          dynamic_cast<string_argument *>(algo->arg("hmc")->arg("metric_file"))
+              ->value());
+      context_vector metric_contexts
+          = get_vec_var_context(metric_filename, num_chains);
+      categorical_argument *hmc
+          = dynamic_cast<categorical_argument *>(algo->arg("hmc"));
+      double stepsize
+          = dynamic_cast<real_argument *>(hmc->arg("stepsize"))->value();
+      double stepsize_jitter
+          = dynamic_cast<real_argument *>(hmc->arg("stepsize_jitter"))->value();
+      if (engine->value() == "nuts" && metric->value() == "dense_e"
+                 && adapt_engaged == true && metric_supplied == false) {
+        int max_depth = dynamic_cast<int_argument *>(
+                            dynamic_cast<categorical_argument *>(
+                                algo->arg("hmc")->arg("engine")->arg("nuts"))
+                                ->arg("max_depth"))
+                            ->value();
+        double delta
+            = dynamic_cast<real_argument *>(adapt->arg("delta"))->value();
+        double gamma
+            = dynamic_cast<real_argument *>(adapt->arg("gamma"))->value();
+        double kappa
+            = dynamic_cast<real_argument *>(adapt->arg("kappa"))->value();
+        double t0 = dynamic_cast<real_argument *>(adapt->arg("t0"))->value();
+        unsigned int init_buffer
+            = dynamic_cast<u_int_argument *>(adapt->arg("init_buffer"))
+                  ->value();
+        unsigned int term_buffer
+            = dynamic_cast<u_int_argument *>(adapt->arg("term_buffer"))
+                  ->value();
+        unsigned int window
+            = dynamic_cast<u_int_argument *>(adapt->arg("window"))->value();
+        return_code = stan::services::em::hmc_nuts_dense_e_adapt(
+            model, num_chains, init_contexts, random_seed, id, init_radius,
+            num_warmup, num_samples, num_thin, save_warmup, refresh, stepsize,
+            stepsize_jitter, max_depth, delta, gamma, kappa, t0, init_buffer,
+            term_buffer, window, interrupt, logger, init_writers,
+            sample_writers, diagnostic_writers);
+      }
   } else if (user_method->arg("variational")) {
     list_argument *algo = dynamic_cast<list_argument *>(
         parser.arg("method")->arg("variational")->arg("algorithm"));
