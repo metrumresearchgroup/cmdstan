@@ -36,6 +36,7 @@
 #include <stan/services/experimental/advi/fullrank.hpp>
 #include <stan/services/experimental/advi/meanfield.hpp>
 #include <stan/services/em/hmc_nuts_dense_e_adapt.hpp>
+#include <stan/services/em/hmc_nuts_diag_e_adapt.hpp>
 #include <stan/services/optimize/bfgs.hpp>
 #include <stan/services/optimize/lbfgs.hpp>
 #include <stan/services/optimize/newton.hpp>
@@ -1158,7 +1159,35 @@ int command(int argc, const char *argv[]) {
           = dynamic_cast<real_argument *>(hmc->arg("stepsize"))->value();
       double stepsize_jitter
           = dynamic_cast<real_argument *>(hmc->arg("stepsize_jitter"))->value();
-      if (engine->value() == "nuts" && metric->value() == "dense_e"
+      if (engine->value() == "nuts" && metric->value() == "diag_e"
+                 && adapt_engaged == true && metric_supplied == false) {
+        categorical_argument *base = dynamic_cast<categorical_argument *>(
+            algo->arg("hmc")->arg("engine")->arg("nuts"));
+        int max_depth
+            = dynamic_cast<int_argument *>(base->arg("max_depth"))->value();
+        double delta
+            = dynamic_cast<real_argument *>(adapt->arg("delta"))->value();
+        double gamma
+            = dynamic_cast<real_argument *>(adapt->arg("gamma"))->value();
+        double kappa
+            = dynamic_cast<real_argument *>(adapt->arg("kappa"))->value();
+        double t0 = dynamic_cast<real_argument *>(adapt->arg("t0"))->value();
+        unsigned int init_buffer
+            = dynamic_cast<u_int_argument *>(adapt->arg("init_buffer"))
+                  ->value();
+        unsigned int term_buffer
+            = dynamic_cast<u_int_argument *>(adapt->arg("term_buffer"))
+                  ->value();
+        unsigned int window
+            = dynamic_cast<u_int_argument *>(adapt->arg("window"))->value();
+        std::cout << "taki test: " << "EM diag_e" << "\n";
+        return_code = stan::services::em::hmc_nuts_diag_e_adapt(
+            model, num_chains, init_contexts, random_seed, id, init_radius,
+            num_warmup, num_samples, num_thin, save_warmup, refresh, stepsize,
+            stepsize_jitter, max_depth, delta, gamma, kappa, t0, init_buffer,
+            term_buffer, window, interrupt, logger, init_writers,
+            sample_writers, diagnostic_writers);
+        } else if (engine->value() == "nuts" && metric->value() == "dense_e"
                  && adapt_engaged == true && metric_supplied == false) {
         int max_depth = dynamic_cast<int_argument *>(
                             dynamic_cast<categorical_argument *>(
