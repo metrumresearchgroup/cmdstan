@@ -8,13 +8,11 @@ def setupCXX(CXX = env.CXX) {
     unstash 'CmdStanSetup'
 
     stanc3_bin_url_str = params.stanc3_bin_url != "nightly" ? "\nSTANC3_TEST_BIN_URL=${params.stanc3_bin_url}\n" : ""
-    writeFile(file: "make/local", text: "CXX=${CXX} \n${stanc3_bin_url_str}")
+    writeFile(file: "make/local", text: "CXX=${CXX} \n${stanc3_bin_url_str} \nCXXFLAGS+=-Wp,-D_GLIBCXX_ASSERTIONS\n")
 }
 
 def runTests(String prefix = "") {
-    """ make -j${env.PARALLEL} build
-        ${prefix}runCmdStanTests.py -j${env.PARALLEL} src/test/interface
-    """
+    "${prefix}runCmdStanTests.py -j${env.PARALLEL} src/test/interface"
 }
 
 def runWinTests(String prefix = "") {
@@ -27,7 +25,6 @@ def runWinTests(String prefix = "") {
             SET \"PATH=C:\\PROGRA~1\\Microsoft^ MPI\\Bin;%PATH%\"
             SET \"MPI_HOME=C:\\PROGRA~1\\Microsoft^ MPI\\Bin\"
             SET \"PATH=C:\\Users\\jenkins\\Anaconda3;%PATH%\"
-            mingw32-make -j${env.PARALLEL} build
             python ${prefix}runCmdStanTests.py -j${env.PARALLEL} src/test/interface
         """
     }
@@ -38,7 +35,6 @@ def deleteDirWin() {
     deleteDir()
 }
 
-def isBranch(String b) { env.BRANCH_NAME == b }
 Boolean isPR() { env.CHANGE_URL != null }
 String fork() { env.CHANGE_FORK ?: "stan-dev" }
 String branchName() { isPR() ? env.CHANGE_BRANCH :env.BRANCH_NAME }
@@ -46,7 +42,10 @@ String branchName() { isPR() ? env.CHANGE_BRANCH :env.BRANCH_NAME }
 
 pipeline {
     agent none
-    options { skipDefaultCheckout() }
+    options {
+        skipDefaultCheckout()
+        disableConcurrentBuilds(abortPrevious: env.BRANCH_NAME != "downstream_tests" && env.BRANCH_NAME != "downstream_hotfix")
+    }
     parameters {
         string(defaultValue: '', name: 'stan_pr',
                description: "Stan PR to test against. Will check out this PR in the downstream Stan repo.")
@@ -59,7 +58,7 @@ pipeline {
         MAC_CXX = 'clang++'
         LINUX_CXX = 'clang++-6.0'
         WIN_CXX = 'g++'
-        PARALLEL = 8
+        PARALLEL = 4
         MPICXX = 'mpicxx.openmpi'
         GIT_AUTHOR_NAME = 'Stan Jenkins'
         GIT_AUTHOR_EMAIL = 'mc.stanislaw@gmail.com'
@@ -67,14 +66,6 @@ pipeline {
         GIT_COMMITTER_EMAIL = 'mc.stanislaw@gmail.com'
     }
     stages {
-        stage('Kill previous builds') {
-            when {
-                not { branch 'develop' }
-                not { branch 'master' }
-                not { branch 'downstream_tests' }
-            }
-            steps { script { utils.killOldBuilds() } }
-        }
         stage('Clean & Setup') {
             agent {
                 docker {
@@ -182,23 +173,24 @@ pipeline {
                     post {
                         always {
 
-                            recordIssues id: "Windows",
-                            name: "Windows interface tests",
-                            enabledForFailure: true,
-                            aggregatingResults : false,
-                            filters: [
-                                excludeFile('/lib/.*'),
-                                excludeFile('tbb/*'),
-                                excludeFile('stan/lib/stan_math/lib/*')
-                            ],
-                            tools: [
-                                gcc4(id: "Windows_gcc4", name: "Windows interface tests@GCC4"),
-                                clang(id: "Windows_clang", name: "Windows interface tests@CLANG")
-                            ],
-                            blameDisabled: false,
-                            qualityGates: [[threshold: 1, type: 'TOTAL', unstable: true]],
-                            healthy: 10, unhealthy: 100, minimumSeverity: 'HIGH',
-                            referenceJobName: env.BRANCH_NAME
+                            recordIssues(
+                                id: "Windows",
+                                name: "Windows interface tests",
+                                enabledForFailure: true,
+                                aggregatingResults : false,
+                                filters: [
+                                    excludeFile('/lib/.*'),
+                                    excludeFile('tbb/*'),
+                                    excludeFile('stan/lib/stan_math/lib/*'),
+                                    excludeMessage(".*'sprintf' is deprecated.*")
+                                ],
+                                tools: [
+                                    gcc4(id: "Windows_gcc4", name: "Windows interface tests@GCC4"),
+                                    clang(id: "Windows_clang", name: "Windows interface tests@CLANG")
+                                ],
+                                qualityGates: [[threshold: 1, type: 'TOTAL', unstable: true]],
+                                healthy: 10, unhealthy: 100, minimumSeverity: 'HIGH'
+                            )
 
                             deleteDirWin()
                         }
@@ -222,23 +214,24 @@ pipeline {
                     post {
                         always {
 
-                            recordIssues id: "Linux_mpi",
-                            name: "Linux interface tests with MPI",
-                            enabledForFailure: true,
-                            aggregatingResults : false,
-                            filters: [
-                                excludeFile('/lib/.*'),
-                                excludeFile('tbb/*'),
-                                excludeFile('stan/lib/stan_math/lib/*')
-                            ],
-                            tools: [
-                                gcc4(id: "Linux_mpi_gcc4", name: "Linux interface tests with MPI@GCC4"),
-                                clang(id: "Linux_mpi_clang", name: "Linux interface tests with MPI@CLANG")
-                            ],
-                            blameDisabled: false,
-                            qualityGates: [[threshold: 1, type: 'TOTAL', unstable: true]],
-                            healthy: 10, unhealthy: 100, minimumSeverity: 'HIGH',
-                            referenceJobName: env.BRANCH_NAME
+                            recordIssues(
+                                id: "Linux_mpi",
+                                name: "Linux interface tests with MPI",
+                                enabledForFailure: true,
+                                aggregatingResults : false,
+                                filters: [
+                                    excludeFile('/lib/.*'),
+                                    excludeFile('tbb/*'),
+                                    excludeFile('stan/lib/stan_math/lib/*'),
+                                    excludeMessage(".*'sprintf' is deprecated.*")
+                                ],
+                                tools: [
+                                    gcc4(id: "Linux_mpi_gcc4", name: "Linux interface tests with MPI@GCC4"),
+                                    clang(id: "Linux_mpi_clang", name: "Linux interface tests with MPI@CLANG")
+                                ],
+                                qualityGates: [[threshold: 1, type: 'TOTAL', unstable: true]],
+                                healthy: 10, unhealthy: 100, minimumSeverity: 'HIGH'
+                            )
 
                             deleteDir()
                         }
@@ -254,23 +247,24 @@ pipeline {
                     post {
                         always {
 
-                            recordIssues id: "Mac",
-                            name: "Mac interface tests",
-                            enabledForFailure: true,
-                            aggregatingResults : false,
-                            filters: [
-                                excludeFile('/lib/.*'),
-                                excludeFile('tbb/*'),
-                                excludeFile('stan/lib/stan_math/lib/*')
-                            ],
-                            tools: [
-                                gcc4(id: "Mac_gcc4", name: "Mac interface tests@GCC4"),
-                                clang(id: "Mac_clang", name: "Mac interface tests@CLANG")
-                            ],
-                            blameDisabled: false,
-                            qualityGates: [[threshold: 1, type: 'TOTAL', unstable: true]],
-                            healthy: 10, unhealthy: 100, minimumSeverity: 'HIGH',
-                            referenceJobName: env.BRANCH_NAME
+                            recordIssues(
+                                id: "Mac",
+                                name: "Mac interface tests",
+                                enabledForFailure: true,
+                                aggregatingResults : false,
+                                filters: [
+                                    excludeFile('/lib/.*'),
+                                    excludeFile('tbb/*'),
+                                    excludeFile('stan/lib/stan_math/lib/*'),
+                                    excludeMessage(".*'sprintf' is deprecated.*")
+                                ],
+                                tools: [
+                                    gcc4(id: "Mac_gcc4", name: "Mac interface tests@GCC4"),
+                                    clang(id: "Mac_clang", name: "Mac interface tests@CLANG")
+                                ],
+                                qualityGates: [[threshold: 1, type: 'TOTAL', unstable: true]],
+                                healthy: 10, unhealthy: 100, minimumSeverity: 'HIGH'
+                            )
 
                             deleteDir()
                         }
@@ -319,7 +313,7 @@ pipeline {
                     }
                     steps {
                         script {
-                            retry(3) { 
+                            retry(3) {
                                 checkout([
                                     $class: 'GitSCM',
                                     branches: [[name: '*/master'], [name: '*/downstream_hotfix']],
@@ -334,7 +328,7 @@ pipeline {
                                     git checkout downstream_hotfix
                                     git reset --hard origin/master
                                     git status
-                                    git push https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/stan-dev/cmdstan.git downstream_hotfix
+                                    git push -f https://${GIT_USERNAME}:${GIT_PASSWORD}@github.com/stan-dev/cmdstan.git downstream_hotfix
                                 """
                             }
                         }
@@ -359,7 +353,7 @@ pipeline {
                     }
                     steps {
                         script {
-                            retry(3) { 
+                            retry(3) {
                                 checkout([
                                     $class: 'GitSCM',
                                     branches: [[name: '*/develop'], [name: '*/downstream_tests']],

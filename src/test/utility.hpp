@@ -3,13 +3,34 @@
 
 #include <boost/algorithm/string.hpp>
 #include <boost/date_time/posix_time/posix_time_types.hpp>
+#include <rapidjson/document.h>
+#include <gtest/gtest.h>
+
 #include <stdexcept>
 #include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
-
 #include <sys/stat.h>
+#include <sys/types.h>
+
+#define EXPECT_IN_STRING(needle, haystack)                  \
+  EXPECT_TRUE(boost::algorithm::contains(haystack, needle)) \
+      << "could not find '" << needle << "' in '" << haystack << "'";
+
+// TODO: a similar macro is defined in both Stan and Stan Math
+//      worth investigating if we can unify them without hassle
+#define EXPECT_THROW_MSG(expr, T_e, msg)   \
+  EXPECT_THROW(                            \
+      {                                    \
+        try {                              \
+          expr;                            \
+        } catch (const T_e &e) {           \
+          EXPECT_IN_STRING(msg, e.what()); \
+          throw;                           \
+        }                                  \
+      },                                   \
+      T_e);
 
 namespace cmdstan {
 namespace test {
@@ -63,7 +84,8 @@ char multiple_command_separator() {
  * @return the string representation of the path with the appropriate
  *    path separator.
  */
-std::string convert_model_path(const std::vector<std::string> &model_path) {
+template <typename StrVec>
+std::string convert_model_path(StrVec &&model_path) {
   std::string path;
   if (model_path.size() > 0) {
     path.append(model_path[0]);
@@ -286,6 +308,88 @@ int idx_first_match(const std::vector<std::string> &lines,
 bool file_exists(const std::string &filename) {
   struct stat buffer;
   return (stat(filename.c_str(), &buffer) == 0);
+}
+
+/**
+ * Validate JSON using rapidjson parser.
+ * @param text String of JSON
+ */
+bool is_valid_JSON(std::string &text) {
+  rapidjson::Document document;
+  return !document.Parse<0>(text.c_str()).HasParseError();
+}
+
+namespace internal {
+
+// TODO: can be replaced with std::filesystem when we have better compiler
+// support for C++17 (currently missing from our minimum clang version)
+#ifdef _WIN32
+#include <io.h>
+void make_unwritable(const std::string &filename) {
+  _chmod(filename.c_str(), _S_IREAD);
+}
+void make_writable(const std::string &filename) {
+  _chmod(filename.c_str(), _S_IWRITE);
+}
+#else
+void make_unwritable(const std::string &filename) {
+  chmod(filename.c_str(), 0444);
+}
+void make_writable(const std::string &filename) {
+  chmod(filename.c_str(), 0644);
+}
+#endif
+
+}  // namespace internal
+
+struct temporary_unwritable_file {
+ public:
+  const std::string filename;
+
+  explicit temporary_unwritable_file(std::string filename)
+      : filename(filename) {
+    {
+      // this will create the file if it does not exist
+      std::ofstream ofs(filename);
+      ofs.close();
+    }
+    EXPECT_TRUE(file_exists(filename));
+    internal::make_unwritable(filename);
+  }
+
+  ~temporary_unwritable_file() noexcept(false) {
+    internal::make_writable(filename);
+    EXPECT_EQ(remove(filename.c_str()), 0);
+    EXPECT_FALSE(file_exists(filename));
+  }
+};
+
+void compare_to_stored_output(const std::string &output,
+                              const std::string &expected_path) {
+  if (getenv("CMDSTAN_UPDATE_EXPECTED_OUTPUT")) {
+    std::ofstream expected_output_file(expected_path);
+    ASSERT_TRUE(expected_output_file.good())
+        << "Could not open expected output file: " << expected_path;
+    expected_output_file << output;
+    expected_output_file.close();
+    std::cout << "Updated expected output file: " << expected_path << std::endl;
+    return;
+  }
+
+  std::ifstream expected_output_file(expected_path);
+  ASSERT_TRUE(expected_output_file.good())
+      << "Could not open expected output file: " << expected_path;
+  std::stringstream ss;
+  ss << expected_output_file.rdbuf();
+  expected_output_file.close();
+  std::string expected_output = ss.str();
+
+  EXPECT_EQ(output, expected_output)
+      << "Output does not match expected output. Expected:\n--------\n"
+      << expected_output << "\n--------\nActual:\n--------\n"
+      << output
+      << "\n--------\n\nSet CMDSTAN_UPDATE_EXPECTED_OUTPUT=1 to update the "
+         "expected output.\n";
 }
 
 }  // namespace test

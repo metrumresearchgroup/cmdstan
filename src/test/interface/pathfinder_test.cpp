@@ -1,11 +1,11 @@
 #include <test/utility.hpp>
-#include <rapidjson/document.h>
 #include <fstream>
 #include <gtest/gtest.h>
 
 using cmdstan::test::convert_model_path;
 using cmdstan::test::count_matches;
 using cmdstan::test::file_exists;
+using cmdstan::test::is_valid_JSON;
 using cmdstan::test::parse_sample;
 using cmdstan::test::run_command;
 using cmdstan::test::run_command_output;
@@ -13,11 +13,11 @@ using cmdstan::test::run_command_output;
 class CmdStan : public testing::Test {
  public:
   void SetUp() {
-    dev_null_path = {"/dev", "null"};
     multi_normal_model = {"src", "test", "test-models", "multi_normal_model"};
     eight_schools_model = {"src", "test", "test-models", "eight_schools"};
     eight_schools_data
         = {"src", "test", "test-models", "eight_schools.data.json"};
+    empty_model = {"src", "test", "test-models", "empty"};
     arg_output = {"test", "output"};
     arg_diags = {"test", "diagnostics"};
     output_csv = {"test", "output.csv"};
@@ -35,10 +35,10 @@ class CmdStan : public testing::Test {
     std::remove(convert_model_path(output_single_json).c_str());
   }
 
-  std::vector<std::string> dev_null_path;
   std::vector<std::string> multi_normal_model;
   std::vector<std::string> eight_schools_model;
   std::vector<std::string> eight_schools_data;
+  std::vector<std::string> empty_model;
   std::vector<std::string> arg_output;
   std::vector<std::string> arg_diags;
   std::vector<std::string> output_csv;
@@ -65,7 +65,7 @@ TEST_F(CmdStan, pathfinder_defaults) {
   EXPECT_EQ(1, count_matches(" seconds (Pathfinders)", output));
   EXPECT_EQ(1, count_matches(" seconds (PSIS)", output));
   EXPECT_EQ(1, count_matches(" seconds (Total)", output));
-  EXPECT_EQ(1, count_matches("save_single_paths = 0 (Default)", output));
+  EXPECT_EQ(1, count_matches("save_single_paths = false (Default)", output));
   EXPECT_EQ(1, count_matches("num_paths = 4 (Default)", output));
 }
 
@@ -88,7 +88,7 @@ TEST_F(CmdStan, pathfinder_40_draws) {
   EXPECT_EQ(1, count_matches(" seconds (Total)", output));
   EXPECT_EQ(1, count_matches("num_psis_draws = 40", output));
   EXPECT_EQ(1, count_matches("num_paths = 4 (Default)", output));
-  EXPECT_EQ(1, count_matches("save_single_paths = 0 (Default)", output));
+  EXPECT_EQ(1, count_matches("save_single_paths = false (Default)", output));
 }
 
 TEST_F(CmdStan, pathfinder_single) {
@@ -106,11 +106,13 @@ TEST_F(CmdStan, pathfinder_single) {
   result_sstream << result_stream.rdbuf();
   result_stream.close();
   std::string output = result_sstream.str();
-  EXPECT_EQ(1, count_matches("# Elapsed Time:", output));
-  EXPECT_EQ(1, count_matches(" seconds (Pathfinder)", output));
+  EXPECT_EQ(1, count_matches("Elapsed Time:", output));
+  EXPECT_EQ(1, count_matches("seconds (Pathfinder)", output));
   EXPECT_EQ(1, count_matches("num_paths = 1", output));
-  EXPECT_EQ(1, count_matches("save_single_paths = 0 (Default)", output));
+  EXPECT_EQ(1, count_matches("save_single_paths = false (Default)", output));
 }
+
+bool is_whitespace(char c) { return c == ' ' || c == '\n'; }
 
 TEST_F(CmdStan, pathfinder_save_single_default_num_paths) {
   std::stringstream ss;
@@ -129,9 +131,9 @@ TEST_F(CmdStan, pathfinder_save_single_default_num_paths) {
   result_sstream << single_csv_stream.rdbuf();
   single_csv_stream.close();
   std::string single_csv = result_sstream.str();
-  EXPECT_EQ(1, count_matches("# Elapsed Time:", single_csv));
-  EXPECT_EQ(1, count_matches(" seconds (Pathfinder)", single_csv));
-  EXPECT_EQ(1, count_matches("save_single_paths = 1", single_csv));
+  EXPECT_EQ(1, count_matches("Elapsed Time:", single_csv));
+  EXPECT_EQ(1, count_matches("seconds (Pathfinder)", single_csv));
+  EXPECT_EQ(1, count_matches("save_single_paths = true", single_csv));
 
   std::fstream single_json_stream(convert_model_path(output_single_json));
   std::stringstream result_json_sstream;
@@ -140,9 +142,11 @@ TEST_F(CmdStan, pathfinder_save_single_default_num_paths) {
   std::string single_json = result_json_sstream.str();
   ASSERT_FALSE(single_json.empty());
 
-  rapidjson::Document document;
-  ASSERT_FALSE(document.Parse<0>(single_json.c_str()).HasParseError());
-  EXPECT_EQ(1, count_matches("\"1\" : {\"iter\" : 1,", single_json));
+  ASSERT_TRUE(is_valid_JSON(single_json));
+  single_json.erase(
+      std::remove_if(single_json.begin(), single_json.end(), is_whitespace),
+      single_json.end());
+  EXPECT_EQ(1, count_matches("\"1\":{\"iter\":1,", single_json));
 }
 
 TEST_F(CmdStan, pathfinder_save_single_num_paths_1) {
@@ -233,6 +237,26 @@ TEST_F(CmdStan, pathfinder_lbfgs_iterations) {
   ASSERT_FALSE(output.empty());
   rapidjson::Document document;
   ASSERT_FALSE(document.Parse<0>(output.c_str()).HasParseError());
-  EXPECT_EQ(1, count_matches("\"3\" : {\"iter\" : 3,", output));
-  EXPECT_EQ(0, count_matches("\"4\" : {\"iter\" : 4,", output));
+  output.erase(std::remove_if(output.begin(), output.end(), is_whitespace),
+               output.end());
+  EXPECT_EQ(1, count_matches("\"3\":{\"iter\":3,", output));
+  EXPECT_EQ(0, count_matches("\"4\":{\"iter\":4,", output));
+}
+
+TEST_F(CmdStan, pathfinder_empty_model) {
+  std::stringstream ss;
+  ss << convert_model_path(empty_model) << " method=pathfinder";
+  run_command_output out = run_command(ss.str());
+  ASSERT_TRUE(out.hasError);
+  EXPECT_EQ(1, count_matches("Model has 0 parameters", out.output));
+}
+
+TEST_F(CmdStan, pathfinder_too_many_PSIS_draws) {
+  std::stringstream ss;
+  ss << convert_model_path(multi_normal_model) << " method=pathfinder"
+     << " num_paths=1 num_draws=10 num_psis_draws=11";
+  run_command_output out = run_command(ss.str());
+  ASSERT_FALSE(out.hasError);
+  EXPECT_EQ(
+      1, count_matches("Warning: Number of PSIS draws is larger", out.output));
 }

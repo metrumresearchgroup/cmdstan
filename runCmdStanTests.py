@@ -15,7 +15,7 @@ import time
 WIN_SFX = '.exe'
 TEST_SFX = '_test.cpp'
 DEBUG = False
-BATCH_SIZE = 25
+BATCH_SIZE = 50
 
 def usage():
     sys.stdout.write('usage: %s <path/test/dir(/files)>\n' % sys.argv[0])
@@ -36,6 +36,8 @@ def isWin():
 
 # edit filename into makefile target name
 def mungeName(name):
+    if name.startswith("./"):
+        name = name[2:]
     if DEBUG:
         print('munge input: %s' % name)
     if name.startswith('src/test/interface'):
@@ -45,7 +47,6 @@ def mungeName(name):
     if isWin():
         name += WIN_SFX
         name = name.replace('\\','/')
-
     name = name.replace(' ', '\\ ').replace('(','\\(').replace(')','\\)')
     if DEBUG:
         print('munge return: %s' % name)
@@ -54,8 +55,6 @@ def mungeName(name):
 
 def doCommand(command):
     print('------------------------------------------------------------')
-    if isWin() and command.startswith('make '):
-      command = command.replace('make ', 'mingw32-make ')
     print('%s' % command)
     p1 = subprocess.Popen(command,shell=True)
     p1.wait()
@@ -77,13 +76,6 @@ def makeBuild(j):
         command = 'make -j%d build' % j
     doCommand(command)
 
-
-def makeTestModels(j):
-    if j == None:
-        command = 'make test-models-hpp'
-    else:
-        command = 'make -j%d test-models-hpp' % j
-    doCommand(command)
 
 def makeMathLibs(j):
     if j == None:
@@ -144,12 +136,18 @@ def main():
     if len(sys.argv) < 2:
         usage()
 
+    stan_mpi = False
     try:
         with open('make/local') as f:
-            stan_mpi =  'STAN_MPI' in f.read()
+            for (_, line) in enumerate(f):
+                if line.strip().startswith("#"):
+                    continue
+                else:
+                    stan_mpi = line.find('STAN_MPI=true') != -1
+                    if stan_mpi:
+                        break
     except IOError:
-        stan_mpi = False
-
+        pass
     argsIdx = 1
     j = None
     if sys.argv[1].startswith('-j'):
@@ -171,7 +169,6 @@ def main():
     makeBuild(j)
     if (isWin()):
         makeMathLibs(j)
-    makeTestModels(j)
 
     # pass 1:  call make to compile test targets
     for i in range(argsIdx,len(sys.argv)):
