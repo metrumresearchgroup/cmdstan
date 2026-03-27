@@ -24,6 +24,7 @@ MATH ?= $(STAN)lib/stan_math/
 RAPIDJSON ?= $(STAN)lib/rapidjson_1.1.0/
 CLI11 ?= lib/CLI11-1.9.1/
 INC_FIRST ?= -I src -I $(STAN)src -I $(RAPIDJSON) -I $(CLI11)
+TORSTEN_STANC3_VERSION := torsten_v0.92.0
 
 ## Detect operating system
 ifneq ($(OS),Windows_NT)
@@ -143,12 +144,14 @@ endif
 include $(MATH)make/compiler_flags
 include $(MATH)make/dependencies
 include $(MATH)make/libraries
+include make/torsten.mk
 include make/stanc
 include make/program
 include make/tests
 include make/command
 
 CMDSTAN_VERSION := 2.38.0
+TORSTEN_VERSION := 0.92.0-rc1
 
 .PHONY: help
 help:
@@ -274,6 +277,7 @@ ifeq ($(OS),Windows_NT)
 		@echo 'to automatically update your user configuration.'
 endif
 	@echo '--- CmdStan v$(CMDSTAN_VERSION) built ---'
+	@echo '--- Torsten v$(TORSTEN_VERSION) built ---'
 
 .PHONY: install-tbb
 install-tbb: $(TBB_TARGETS)
